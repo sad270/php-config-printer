@@ -24,6 +24,17 @@ use Symplify\PhpConfigPrinter\ValueObject\FunctionName;
 final readonly class ArgsNodeFactory
 {
     /**
+     * @var array<string, string>
+     */
+    private const TAGGED_ITERATOR_ARGUMENT_MAP = [
+        'tag' => 'tag',
+        'index_by' => 'indexAttribute',
+        'default_index_method' => 'defaultIndexMethod',
+        'default_priority_method' => 'defaultPriorityMethod',
+        'exclude' => 'exclude',
+        'exclude_self' => 'excludeSelf',
+    ];
+    /**
      * @var string
      */
     private const TAG_SERVICE = 'service';
@@ -61,7 +72,7 @@ final readonly class ArgsNodeFactory
     }
 
     /**
-     * @return mixed[]|Arg[]
+     * @return Arg[]
      */
     public function createFromValues(
         mixed $values,
@@ -196,14 +207,20 @@ final readonly class ArgsNodeFactory
         if ($taggedValue->getTag() === self::TAG_SERVICE) {
             return $this->taggedServiceResolver->resolve($taggedValue);
         }
-
-        $name = match ($taggedValue->getTag()) {
-            'tagged_iterator' => new FullyQualified(FunctionName::TAGGED_ITERATOR),
-            'tagged_locator' => new FullyQualified(FunctionName::TAGGED_LOCATOR),
-            default => new Name($taggedValue->getTag())
-        };
-
         $args = $this->createFromValues($taggedValue->getValue());
+        switch ($taggedValue->getTag()) {
+            case 'tagged_iterator':
+                $name = new FullyQualified(FunctionName::TAGGED_ITERATOR);
+                $this->convertTaggedIteratorArgument($args);
+                break;
+            case 'tagged_locator':
+                $name = new FullyQualified(FunctionName::TAGGED_LOCATOR);
+                $this->convertTaggedIteratorArgument($args);
+                break;
+            default:
+                $name = new Name($taggedValue->getTag());
+                break;
+        }
 
         return new FuncCall($name, $args);
     }
@@ -246,5 +263,19 @@ final readonly class ArgsNodeFactory
         $naturalOrderKeys = range(0, $valueCount - 1);
 
         return $naturalOrderKeys === array_keys($values);
+    }
+
+    /**
+     * @param Arg[] $args
+     * @return void
+     */
+    private function convertTaggedIteratorArgument(array $args): void
+    {
+        foreach ($args as $arg) {
+            $parameterName = $arg->name->name;
+            if (isset(self::TAGGED_ITERATOR_ARGUMENT_MAP[$parameterName])) {
+                $arg->name->name = self::TAGGED_ITERATOR_ARGUMENT_MAP[$parameterName];
+            }
+        }
     }
 }
